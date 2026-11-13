@@ -1,6 +1,6 @@
 # Strata for fnOS
 
-Strata 的飞牛原生第三方 FPK，由 **lufan** 适配与打包。应用中心负责安装、启停和运行设置，提供原版 Strata 聊天网页及 OpenAI 兼容接口。推理在 NAS 上执行。
+Strata 的飞牛原生第三方 FPK，由 **fan789** 适配与打包。应用中心负责安装、启停和运行设置，提供原版 Strata 聊天网页及 OpenAI 兼容接口。推理在 NAS 上执行。
 
 适用于 x86-64 飞牛和该 Strata CUDA 13 引擎支持的 NVIDIA GPU。引擎声明的最低 NVIDIA 驱动为 580.65。模型权重需单独下载或导入。请按模型、量化和上下文准备内存、显存和存储空间。
 

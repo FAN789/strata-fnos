@@ -1,6 +1,6 @@
 # Strata for fnOS 1.0
 
-Strata 的首个公开飞牛版，由 lufan 适配与打包。
+Strata 的首个公开飞牛版，由 fan789 适配与打包。
 
 - 模型管理页支持下载、导入 GGUF 和切换模型，并显示加载阶段与已用时间。
 - 支持 NVIDIA GPU 推理、浏览器聊天和 OpenAI 兼容 API。
