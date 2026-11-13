@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strata</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    font: 15px/1.55 Inter, "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+    --background: #eef3fa; --surface: #ffffff; --subtle: #f4f7fc; --line: #dce4ef;
+    --ink: #172746; --muted: #526581; --accent: #275ed4; --accent-soft: #e9f0ff;
+    --on-accent: #fff; --good: #1a714f; --warn: #8c540d; --danger: #a7303c;
+    --hero: #122443; --hero-edge: #2b5091; --hero-ink: #f6f9ff; --hero-muted: #b9cdee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: #101725; --surface: #182335; --subtle: #121c2d; --line: #31425b;
+      --ink: #ecf3ff; --muted: #a5b6cf; --accent: #8eb4ff; --accent-soft: #263d67;
+      --on-accent: #10213e; --good: #81dbb2; --warn: #ffd08a; --danger: #ff9ca6;
+      --hero: #172b50; --hero-edge: #365b9d; --hero-ink: #f6f9ff; --hero-muted: #c1d3f1;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box }
+  [hidden] { display: none !important }
+  body { margin: 0; color: var(--ink); background: var(--background) }
+  main { container-type: inline-size;
+         margin-inline: var(--window-clip-left, 0px) var(--window-clip-right, 0px);
+         padding: 18px 0 calc(32px + var(--window-clip-bottom, 0px)) }
+  .layout { margin-inline: clamp(12px, 3cqi, 24px) }
+  .dashboard { display: grid; grid-template-columns: minmax(0, 1fr); column-gap: 16px; align-items: start }
+  .library-area { min-width: 0 }
+  #window-viewport { position: fixed; inset: 0; pointer-events: none }
+  h1, h2, p { margin: 0 }
+  h1 { font-size: clamp(1.9rem, 5vw, 2.8rem); line-height: 1; letter-spacing: -.055em }
+  h2, summary, legend { font-size: 1.1rem; font-weight: 700 }
+  .hero { display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: center;
+          margin-bottom: 12px; padding: clamp(14px, 3vw, 22px); border-radius: 16px; color: var(--hero-ink);
+          background: linear-gradient(125deg, var(--hero) 25%, var(--hero-edge) 100%) }
+  .brand { display: flex; align-items: center; gap: 15px }
+  .brand-mark { width: 47px; height: 47px; flex: 0 0 auto; display: grid; place-items: center;
+                border: 1px solid #ffffff57; border-radius: 14px; background: #ffffff18; color: #b9d8ff }
+  .brand-mark::before { content: ""; width: 26px; height: 26px; background: currentColor;
+                        clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%) }
+  .brand-caption { margin-top: 6px; color: var(--hero-muted); font-size: .88rem }
+  .hero-status { min-width: 0; border-left: 1px solid #ffffff43; padding-left: 16px }
+  #state { font-weight: 650 }
+  #state::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 9px;
+                   border-radius: 50%; vertical-align: .1em; background: #bfd2ef }
+  #state[data-state="ready"]::before { background: #6be5a9 }
+  #state[data-state="starting"]::before { background: #ffd08a }
+  #state[data-state="failed"]::before { background: #ffa0a7 }
+  #active-summary { margin-top: 5px; color: var(--hero-muted); overflow-wrap: anywhere }
+  #message { color: var(--danger); background: var(--surface); border: 1px solid var(--line);
+             border-left: 3px solid var(--danger); padding: 10px 14px; border-radius: 10px; margin-bottom: 16px }
+  #message:empty { display: none }
+  .quick-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px }
+  .quick-actions button[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent) }
+  .panel, fieldset { min-width: 0; margin: 0 0 16px; border: 1px solid var(--line); border-radius: 15px;
+                    background: var(--surface); padding: clamp(15px, 3vw, 22px) }
+  .panel-header { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px }
+  .settings-header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 8px }
+  .settings-header p { flex: 1 1 240px }
+  .panel > h2 { margin-bottom: 10px }
+  .panel p + p, .panel p + button, .panel form > p { margin-top: 11px }
+  .row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px }
+  .row > :first-child { flex: 1; min-width: min(180px, 100%); overflow-wrap: anywhere }
+  .model-row { background: var(--subtle); border: 1px solid var(--line); padding: 12px; border-radius: 11px; margin-top: 8px }
+  .model-row[data-current="true"] { border-color: var(--accent); background: var(--accent-soft) }
+  .model-meta { color: var(--muted); font-size: .86rem; margin-top: 3px }
+  .model-current { color: var(--accent); font-size: .86rem; font-weight: 700 }
+  .muted { color: var(--muted) }
+  label { display: block; margin: 12px 0 4px }
+  select, input, button, .action { font: inherit; color: inherit; border: 1px solid var(--line); border-radius: 8px;
+                                  background: var(--subtle); padding: 8px 11px }
+  button, .action, summary { cursor: pointer }
+  button, .action { font-weight: 600 }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent) }
+  button:disabled { opacity: .58; cursor: default }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px }
+  .action { display: inline-block; text-decoration: none; background: var(--accent); border-color: transparent; color: var(--on-accent) }
+  .action:hover:not(:disabled) { color: var(--on-accent); filter: brightness(1.1) }
+  .form-grid, #settings-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); column-gap: 12px }
+  .form-grid > div > select, #settings-fields input, #settings-fields select { width: 100%; margin-top: 4px }
+  #search-proxy-fields { margin: 16px 0 0 }
+  #search-proxy-fields .form-grid { margin-top: 4px }
+  #search-proxy-url { width: 100% }
+  #search-proxy-current { margin-top: 8px; overflow-wrap: anywhere }
+  #load-progress { margin-top: 8px; color: var(--hero-muted) }
+  #local { background: var(--subtle); border-radius: 10px; padding: 12px; margin-top: 12px }
+  #local > p:first-child { color: var(--muted) }
+  #root { max-width: 100% }
+  #folder { margin-top: 10px; color: var(--muted) }
+  #files { max-height: 220px; overflow: auto; padding: 0; margin: 5px 0; list-style: none }
+  #files button { width: 100%; text-align: left; margin: 0 0 4px; overflow-wrap: anywhere }
+  #files button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft) }
+  #picked { overflow-wrap: anywhere }
+  #form fieldset > p { margin-top: 12px }
+  #task[data-result="complete"] { border-left: 3px solid var(--good) }
+  #task[data-result="error"] { border-left: 3px solid var(--danger) }
+  #task[data-result="interrupted"] { border-left: 3px solid var(--warn) }
+  #task-name { overflow-wrap: anywhere }
+  progress { display: block; width: 100%; height: 10px; margin: 10px 0 4px; border: 0; border-radius: 20px;
+             overflow: hidden; appearance: none; background: var(--accent-soft); accent-color: var(--accent) }
+  progress::-webkit-progress-bar { background: var(--accent-soft) }
+  progress::-webkit-progress-value { background: var(--accent); border-radius: 20px }
+  progress::-moz-progress-bar { background: var(--accent); border-radius: 20px }
+  #task-details { margin-top: 10px }
+  #task-details summary { font-size: .88rem }
+  #progress { background: var(--subtle); color: var(--muted); margin: 8px 0 0; padding: 12px; border-radius: 8px;
+              white-space: pre-wrap; overflow-wrap: anywhere; font: .82rem/1.55 ui-monospace, monospace }
+  #key { display: block; width: 100%; margin-top: 8px }
+  @container (max-width: 400px) {
+    .hero-status { flex-basis: 100%; border-left: 0; padding: 0 }
+  }
+  @container (min-width: 760px) {
+    .dashboard:has(#task:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(280px, .6fr) }
+    .dashboard:has(#task:not([hidden])) .library-area { grid-column: 1; grid-row: 1 }
+    .dashboard:has(#task:not([hidden])) #task { grid-column: 2; grid-row: 1 }
+  }
+</style>
+<div id="window-viewport" aria-hidden="true"></div>
+<main>
+ <div class="layout">
+  <header class="hero">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div><h1>Strata</h1><p class="brand-caption">模型管理</p></div>
+    </div>
+    <div class="hero-status">
+      <p id="state" role="status">正在连接 Strata…</p>
+      <p id="active-summary" hidden></p>
+      <div id="load-progress" hidden>
+        <progress aria-label="模型加载进度"></progress>
+        <p><span id="load-phase" role="status"></span> · <span id="load-elapsed"></span></p>
+      </div>
+    </div>
+  </header>
+  <div class="quick-actions">
+    <a id="chat" class="action" target="_blank" rel="noopener noreferrer" hidden>打开聊天</a>
+    <button id="toggle-settings" type="button" aria-controls="settings" aria-expanded="false" hidden>运行设置</button>
+    <button id="toggle-api" type="button" aria-controls="ready" aria-expanded="false" hidden>API 密钥</button>
+  </div>
+  <p id="message" role="alert"></p>
+  <section class="panel" id="settings" aria-labelledby="toggle-settings" hidden>
+    <form id="settings-form">
+      <div class="settings-header">
+        <p class="muted">设置按模型保存。保存后会重新加载当前模型。</p>
+        <button id="settings-save" class="action" type="submit" disabled>保存并重新加载</button>
+      </div>
+      <div id="settings-fields"></div>
+      <fieldset id="search-proxy-fields" hidden>
+        <legend>搜索代理</legend>
+        <p class="muted">随当前模型保存，仅用于联网搜索。保存后会重新加载模型。</p>
+        <p id="search-proxy-current" hidden>已保存的代理地址 <code id="search-proxy-endpoint"></code></p>
+        <div class="form-grid">
+          <div>
+            <label for="search-proxy-mode">连接方式</label>
+            <select id="search-proxy-mode" name="search_proxy_mode">
+              <option value="">沿用当前设置</option>
+              <option value="inherit">继承运行环境的代理</option>
+              <option value="direct">直接连接</option>
+              <option value="custom">指定 HTTP 代理</option>
+            </select>
+          </div>
+          <div id="search-proxy-address" hidden>
+            <label for="search-proxy-url">代理地址</label>
+            <input id="search-proxy-url" name="search_proxy_url" type="text" inputmode="url" maxlength="1024"
+                   placeholder="http://proxy.example.com:7890" autocomplete="off" spellcheck="false" disabled>
+          </div>
+        </div>
+      </fieldset>
+    </form>
+  </section>
+  <section class="panel" id="ready" aria-labelledby="toggle-api" hidden>
+    <p>首次打开聊天时，在「关于 → 设置 → API 密钥」粘贴密钥，再回到「聊天」。</p>
+    <button id="show-key" type="button" aria-controls="key" aria-expanded="false">显示 API 密钥</button>
+    <input id="key" aria-label="API 密钥" type="password" readonly hidden>
+  </section>
+  <div class="dashboard">
+   <section class="panel" id="task" hidden>
+    <h2 id="task-name"></h2>
+    <p id="task-status" role="status"></p>
+    <progress id="task-progress" max="100" aria-label="模型下载进度" hidden></progress>
+    <p id="task-bytes" class="muted" hidden></p>
+    <details id="task-details" hidden><summary>任务详情</summary><pre id="progress"></pre></details>
+   </section>
+   <div class="library-area">
+      <section class="panel">
+        <div class="panel-header">
+          <h2>模型库</h2>
+          <button id="toggle-add" type="button" aria-controls="form" aria-expanded="false" hidden>添加模型</button>
+        </div>
+        <p id="model-empty" class="muted" hidden>添加一个模型后即可开始聊天。</p>
+        <div id="library"></div>
+      </section>
+      <form id="form" hidden>
+    <fieldset id="fields">
+      <legend>添加模型</legend>
+      <label for="source">模型来源</label>
+      <select id="source"><option value="local">使用 NAS 上的 GGUF</option><option value="download">下载 Qwen3.8 Flash Next</option></select>
+      <section id="local">
+        <p>把 GGUF 放进飞牛的「文件管理 → 应用文件 → <strong>strata-models → models</strong>」。分片模型需放在同一目录。也可以先在应用设置中授权已有的模型目录。</p>
+        <label for="root">模型目录</label>
+        <select id="root"></select>
+        <button id="refresh" type="button">刷新文件</button>
+        <button id="up" type="button" disabled>上一级</button>
+        <p id="folder"></p>
+        <ul id="files"></ul>
+        <p id="picked">请选择 GGUF 文件。</p>
+        <label><input type="checkbox" id="bf16"> 启用 BF16 兼容转换</label>
+      </section>
+      <div class="form-grid">
+        <div><label for="model">模型量化</label><select id="model"></select></div>
+        <div><label for="context">上下文大小</label>
+          <select id="context"><option value="8192">8K</option><option value="32768">32K</option><option value="65536">64K</option><option value="131072">128K</option><option value="262144">256K</option></select>
+        </div>
+      </div>
+      <section id="repository-field" hidden>
+        <label for="repository">下载站点</label>
+        <select id="repository"><option value="huggingface">Hugging Face</option><option value="modelscope">ModelScope（魔搭）</option></select>
+      </section>
+      <p id="download-note" hidden>请准备足够的存储空间。若 Hugging Face 连接超时，可改选 ModelScope 后重试。</p>
+      <p><button id="submit" class="action" disabled>准备模型</button></p>
+    </fieldset>
+      </form>
+   </div>
+  </div>
+ </div>
+</main>
+<script>
+const byId = (id) => document.getElementById(id);
+if (window.parent !== window) {
+  function setWindowClip(left, right, bottom) {
+    const style = document.documentElement.style;
+    style.setProperty("--window-clip-left", Math.max(0, left) + "px");
+    style.setProperty("--window-clip-right", Math.max(0, right) + "px");
+    style.setProperty("--window-clip-bottom", Math.max(0, bottom) + "px");
+  }
+  const frame = window.frameElement;
+  if (frame) {
+    // fnOS can move part of the app window off-screen. Read the visible area
+    // from its desktop without changing the host window or its saved position.
+    const desktop = frame.ownerDocument.documentElement;
+    const view = frame.ownerDocument.defaultView;
+    const fit = () => {
+      const box = frame.getBoundingClientRect();
+      const left = Math.max(0, -box.left), right = Math.max(0, box.right - desktop.clientWidth);
+      if (box.width > left + right) setWindowClip(left, right, box.bottom - desktop.clientHeight);
+    };
+    const resize = new ResizeObserver(fit);
+    resize.observe(frame);
+    resize.observe(desktop);
+    const movement = new MutationObserver(fit);
+    for (let node = frame; node; node = node.parentElement) {
+      movement.observe(node, {attributes: true, attributeFilter: ["style", "class"]});
+    }
+    view.addEventListener("scroll", fit, {capture: true, passive: true});
+    window.addEventListener("pagehide", () => {
+      resize.disconnect();
+      movement.disconnect();
+      view.removeEventListener("scroll", fit, true);
+    }, {once: true});
+    fit();
+  } else {
+    const viewport = byId("window-viewport");
+    const clip = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      const full = entry.boundingClientRect, visible = entry.intersectionRect;
+      setWindowClip(visible.left - full.left, full.right - visible.right, full.bottom - visible.bottom);
+    }, {threshold: Array.from({length: 101}, (_, i) => i / 100)});
+    clip.observe(viewport);
+  }
+}
+const form = byId("form"), root = byId("root"), files = byId("files"), source = byId("source");
+let folder = "", picked = "", csrf = "", options = {}, roots = [], state = "";
+let status = {}, adding = false, libraryKey = "", settingsRevision = "", settingsActive = "";
+const base = location.pathname.replace(/\/$/, "") + "/";
+const states = {
+  empty: "请选择一个模型，Strata 会准备并自动加载它。",
+  starting: "正在加载模型。大模型首次加载可能需要几分钟。",
+  failed: "模型启动失败。可从模型库重新加载或切换模型。",
+  unavailable: "暂时无法读取推理服务状态。",
+  unloaded: "当前模型已卸载。",
+  ready: "模型已就绪。"
+};
+function error(message) { byId("message").textContent = message; }
+async function api(path, body) {
+  const request = body === undefined ? {} : {
+    method: "POST", headers: {"Content-Type": "application/json", "X-Strata-Setup": csrf},
+    body: JSON.stringify(body)
+  };
+  const response = await fetch(base + path, request);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "无法连接 Strata。");
+  return data;
+}
+function canSubmit() {
+  byId("submit").disabled = status.job?.result === "running" || status.changing || state === "starting" ||
+                            (source.value === "local" && !picked);
+}
+function changeSource() {
+  const local = source.value === "local";
+  byId("local").hidden = local === false;
+  byId("download-note").hidden = local;
+  byId("repository-field").hidden = local;
+  const choices = Object.entries(options).map(([id, label]) => new Option(label, id));
+  if (local) choices.unshift(new Option("自动识别", ""));
+  byId("model").replaceChildren(...choices);
+  const verb = local ? "导入" : "下载";
+  byId("submit").textContent = status.active ? verb + "模型" : verb + "并加载";
+  canSubmit();
+}
+async function browse() {
+  const requestedFolder = folder, requestedRoot = root.value;
+  files.replaceChildren();
+  byId("folder").textContent = folder || "模型目录";
+  byId("up").disabled = !folder;
+  if (!roots.length) return;
+  try {
+    const rows = await api("browse?" + new URLSearchParams({root: requestedRoot, path: requestedFolder}));
+    if (folder !== requestedFolder || root.value !== requestedRoot) return;
+    for (const row of rows) {
+      const item = document.createElement("li"), button = document.createElement("button");
+      button.type = "button";
+      if (!row.directory) button.dataset.file = folder ? folder + "/" + row.name : row.name;
+      if (!row.directory) button.setAttribute("aria-pressed", String(button.dataset.file === picked));
+      button.textContent = row.directory ? row.name + "/" : row.name;
+      button.onclick = () => {
+        const path = folder ? folder + "/" + row.name : row.name;
+        if (row.directory) { folder = path; selectFile(""); browse(); }
+        else selectFile(path);
+      };
+      item.append(button);
+      files.append(item);
+    }
+    if (!rows.length) byId("folder").textContent += " · 没有可选的 GGUF";
+  } catch (reason) { error(reason.message); }
+}
+function selectFile(path) {
+  picked = path;
+  for (const button of files.querySelectorAll("[data-file]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.file === path));
+  }
+  byId("picked").textContent = path ? "已选 " + path : "请选择 GGUF 文件。";
+  canSubmit();
+}
+root.onchange = () => { folder = ""; selectFile(""); browse(); };
+source.onchange = changeSource;
+byId("refresh").onclick = () => { error(""); browse(); };
+byId("up").onclick = () => { folder = folder.split("/").slice(0, -1).join("/"); selectFile(""); browse(); };
+form.onsubmit = async (event) => {
+  event.preventDefault();
+  error("");
+  byId("fields").disabled = true;
+  try {
+    await api("import", {source: source.value, model: byId("model").value, repository: byId("repository").value, root: root.value,
+                         path: picked, context: byId("context").value, bf16: byId("bf16").checked});
+    adding = false;
+    form.hidden = true;
+    await refreshStatus();
+  } catch (reason) { error(reason.message); }
+  finally { byId("fields").disabled = false; }
+};
+function setKeyVisible(value = "") {
+  const input = byId("key"), button = byId("show-key");
+  input.value = value;
+  input.hidden = !value;
+  input.type = value ? "text" : "password";
+  button.setAttribute("aria-expanded", String(Boolean(value)));
+  button.textContent = value ? "隐藏 API 密钥" : "显示 API 密钥";
+  if (value) input.select();
+}
+function showPanel(id, visible) {
+  byId(id === "ready" ? "toggle-api" : "toggle-settings").setAttribute("aria-expanded", String(visible));
+  byId(id).hidden = !visible;
+  if (id === "ready" && !visible) setKeyVisible();
+}
+byId("toggle-api").onclick = () => {
+  const opening = byId("ready").hidden;
+  if (opening) showPanel("settings", false);
+  showPanel("ready", opening);
+};
+byId("show-key").onclick = async () => {
+  const button = byId("show-key");
+  if (!byId("key").hidden) return setKeyVisible();
+  button.disabled = true;
+  try {
+    const {key} = await api("chat-key", {});
+    if (!byId("ready").hidden) setKeyVisible(key);
+  } catch (reason) { error(reason.message); }
+  finally { button.disabled = false; }
+};
+const modelSources = { local: "本地 GGUF", existing: "已有配置", huggingface: "Hugging Face", modelscope: "ModelScope" };
+const gigabytes = (bytes) => (bytes / 1000000000).toFixed(1) + " GB";
+const taskSteps = {
+  "Getting the helper packages ready": "正在准备依赖组件",
+  "Checking the engine for this PC": "正在检查本机推理引擎",
+  "Getting the model files": "正在获取模型文件",
+  "Downloading the model files": "正在下载模型文件",
+  "The model files are on this computer; checking them": "正在校验本地模型文件",
+  "Preparing your model for Strata (one time)": "正在准备模型（仅首次需要）",
+  "Preparing the model data for the engine (one time)": "正在转换推理引擎所需的数据（仅首次需要）",
+  "Saving the model's settings": "正在保存模型设置",
+  "Writing this launch's settings…": "正在写入启动配置…",
+  "Settings are saved.": "模型设置已保存。",
+  "Model registered. Select it on the workstation homepage.": "模型已加入模型库。"
+};
+function localizeTaskLine(line) {
+  const verification = line.match(/^Checking that the model files are complete.*?(?:\:\s*([\d.]+) of ([\d.]+) GB)?$/);
+  if (verification) return verification[1] ? "正在校验模型文件（" + verification[1] + " / " + verification[2] + " GB）" : "正在校验模型文件";
+  const downloading = line.match(/^(.+?):\s*([\d.]+) of ([\d.]+) GB$/);
+  if (downloading && taskSteps[downloading[1]]) return taskSteps[downloading[1]] + "（" + downloading[2] + " / " + downloading[3] + " GB）";
+  return taskSteps[line] || line;
+}
+function showJob(job) {
+  byId("task").hidden = !job;
+  if (!job) return;
+  byId("task").dataset.result = job.result;
+  const downloading = job.source === "download";
+  const label = downloading ? "下载" : "导入";
+  byId("task-name").textContent = label + " · " + job.name;
+  const done = job.result === "complete", failed = job.result === "error";
+  const interrupted = job.result === "interrupted";
+  const step = job.step || "";
+  const verifying = /Checking that the model files are complete/i.test(step);
+  const preparing = job.stage === "config" || /Preparing.*model|Saving the model/i.test(step);
+  byId("task-status").textContent = done ? label + "完成，模型已加入模型库。" :
+    failed ? label + "失败，可重新提交。" : interrupted ? label + "已中断，可重新提交继续。" :
+    verifying ? "正在校验模型文件…" :
+    preparing || !downloading ? "正在准备模型…" : "正在下载模型文件…";
+  const showBytes = job.result === "running" && Number.isFinite(job.bytes) && job.total > 0;
+  byId("task-progress").hidden = !showBytes;
+  byId("task-bytes").hidden = !showBytes;
+  if (showBytes) {
+    byId("task-progress").value = Math.min(100, 100 * job.bytes / job.total);
+    byId("task-bytes").textContent = gigabytes(job.bytes) + " / 约 " + gigabytes(job.total);
+  }
+  byId("task-details").hidden = !step && !job.detail;
+  byId("progress").textContent = [step, job.detail].filter(Boolean).join("\n").split("\n").map(localizeTaskLine).join("\n");
+}
+function showLibrary(data) {
+  const key = JSON.stringify([data.models, data.active, data.state, data.changing, data.job?.result]);
+  if (key === libraryKey) return;
+  libraryKey = key;
+  byId("model-empty").hidden = data.models.length > 0;
+  const rows = data.models.map((model) => {
+    const row = document.createElement("div");
+    row.className = "row model-row";
+    const info = document.createElement("div"), name = document.createElement("strong"), meta = document.createElement("div");
+    name.textContent = model.name;
+    meta.className = "model-meta";
+    meta.textContent = [modelSources[model.source], model.context && Number(model.context).toLocaleString("zh-CN") + " tokens"].filter(Boolean).join(" · ");
+    info.append(name, meta);
+    row.append(info);
+    const active = data.active === model.id;
+    row.dataset.current = active;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = active && data.state === "ready" ? "当前模型" : active ? "加载当前模型" : "切换到此模型";
+    button.disabled = (active && data.state === "ready") || data.state === "starting" || data.changing || data.job?.result === "running";
+    button.onclick = async () => {
+      button.disabled = true;
+      error("");
+      try { await api("activate", {id: model.id}); await refreshStatus(); }
+      catch (reason) { error(reason.message); button.disabled = false; }
+    };
+    if (active && data.state === "ready") {
+      const badge = document.createElement("span");
+      badge.className = "model-current";
+      badge.textContent = "当前模型";
+      row.append(badge);
+    } else {
+      row.append(button);
+    }
+    return row;
+  });
+  byId("library").replaceChildren(...rows);
+}
+async function loadSettings() {
+  const active = settingsActive;
+  const data = await api("settings");
+  if (active !== settingsActive || byId("settings").hidden) return;
+  settingsRevision = data.revision;
+  const fields = data.items.map((field) => {
+    const label = document.createElement("label");
+    label.textContent = field.label;
+    const input = document.createElement(field.options ? "select" : "input");
+    input.name = field.id;
+    if (field.options) {
+      const current = field.options.find((choice) => choice.value === field.value);
+      input.append(new Option(field.value ? "当前值（" + (current?.label ?? field.value) + "）" : "沿用当前设置", ""));
+      for (const choice of field.options) input.append(new Option(choice.label, choice.value));
+      if (current) input.value = current.value;
+    } else {
+      input.type = "number";
+      input.min = field.min;
+      input.max = field.max;
+      input.value = field.value;
+    }
+    label.append(input);
+    return label;
+  });
+  byId("settings-fields").replaceChildren(...fields);
+  const mode = byId("search-proxy-mode");
+  const current = [...mode.options].find((option) => option.value === data.search_proxy_mode);
+  mode.options[0].text = current ? "当前：" + current.text : "沿用当前设置";
+  mode.value = "";
+  byId("search-proxy-endpoint").textContent = data.search_proxy_endpoint || "";
+  byId("search-proxy-current").hidden = !data.search_proxy_endpoint;
+  byId("search-proxy-url").value = "";
+  byId("search-proxy-url").placeholder = data.search_proxy_mode === "custom" ? "已设置，留空保留" : "http://proxy.example.com:7890";
+  byId("search-proxy-fields").hidden = false;
+  mode.onchange();
+}
+byId("search-proxy-mode").onchange = () => {
+  const custom = byId("search-proxy-mode").value === "custom";
+  const url = byId("search-proxy-url");
+  byId("search-proxy-address").hidden = !custom;
+  url.disabled = !custom;
+  if (!custom) url.value = "";
+};
+byId("toggle-settings").onclick = async () => {
+  const opening = byId("settings").hidden;
+  showPanel("settings", opening);
+  if (!opening) return;
+  showPanel("ready", false);
+  settingsRevision = "";
+  byId("settings-fields").replaceChildren();
+  byId("search-proxy-fields").hidden = true;
+  byId("search-proxy-url").value = "";
+  byId("settings-save").disabled = true;
+  try { await loadSettings(); } catch (reason) { error(reason.message); }
+  updateSaveButton();
+};
+byId("settings-form").onsubmit = async (event) => {
+  event.preventDefault();
+  error("");
+  try {
+    const values = Object.fromEntries(new FormData(event.target));
+    await api("settings", {...values, revision: settingsRevision});
+    byId("search-proxy-url").value = "";
+    showPanel("settings", false);
+    await refreshStatus();
+  } catch (reason) { error(reason.message); }
+};
+byId("toggle-add").onclick = async () => {
+  adding = !adding;
+  renderAdd();
+  if (adding) await browse();
+};
+function renderAdd() {
+  const busy = status.job?.result === "running" || state === "starting" || status.changing;
+  form.hidden = busy || (!adding && Boolean(status.models?.length));
+  byId("toggle-add").hidden = !status.models?.length || busy;
+  byId("toggle-add").textContent = adding ? "收起添加表单" : "添加模型";
+  byId("toggle-add").setAttribute("aria-expanded", String(!form.hidden));
+}
+function updateSaveButton() {
+  byId("settings-save").disabled = !settingsRevision || state !== "ready" || status.changing || status.job?.result === "running";
+}
+const loadPhases = {
+  starting: "正在启动推理引擎",
+  weights: "正在读取模型权重",
+  memory: "正在将模型数据载入内存",
+  gpu: "正在填充 GPU 专家缓存",
+  finalizing: "正在等待模型服务就绪"
+};
+function showLoadProgress(loading) {
+  byId("load-progress").hidden = !loading;
+  if (!loading) return;
+  const phase = loadPhases[loading.phase] || loadPhases.starting;
+  if (byId("load-phase").textContent !== phase) byId("load-phase").textContent = phase;
+  byId("load-elapsed").textContent = "已用 " + loading.elapsed + " 秒";
+}
+async function refreshStatus() {
+  try {
+    const data = await api("status");
+    const previous = state;
+    status = data;
+    state = data.state;
+    csrf = data.csrf;
+    byId("state").dataset.state = state;
+    const active = data.models.find((model) => model.id === data.active);
+    byId("active-summary").hidden = !active;
+    if (active) byId("active-summary").textContent = active.name;
+    byId("state").textContent = [states[state] || state, data.notice].filter(Boolean).join(" ");
+    showLoadProgress(data.loading);
+    showJob(data.job);
+    showLibrary(data);
+    renderAdd();
+    byId("chat").hidden = state !== "ready";
+    byId("toggle-api").hidden = state !== "ready";
+    byId("toggle-settings").hidden = !data.active;
+    if (state !== "ready") showPanel("ready", false);
+    if (settingsActive !== data.active) {
+      showPanel("settings", false);
+      settingsRevision = "";
+      settingsActive = data.active;
+    }
+    updateSaveButton();
+    if (state === "ready") byId("chat").href = "http://" + location.hostname + ":" + data.port + "/";
+    if (!previous || JSON.stringify(roots) !== JSON.stringify(data.roots)) {
+      roots = data.roots;
+      options = data.downloads;
+      root.replaceChildren(...roots.map((label, index) => new Option(label, String(index))));
+      folder = "";
+      selectFile("");
+      changeSource();
+      if (!form.hidden) browse();
+    }
+    canSubmit();
+    const verb = source.value === "local" ? "导入" : "下载";
+    byId("submit").textContent = data.active ? verb + "模型" : verb + "并加载";
+  } catch (reason) { byId("state").textContent = reason.message; }
+}
+async function poll() {
+  await refreshStatus();
+  setTimeout(poll, 1800);
+}
+poll();
+</script>

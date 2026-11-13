@@ -1,0 +1,14 @@
+{
+  ".url": {
+    "ai-workstation.Application": {
+      "title": "Strata",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/ai-workstation",
+      "gatewaySocket": "strata-setup.sock",
+      "url": "/app/ai-workstation/",
+      "allUsers": false
+    }
+  }
+}

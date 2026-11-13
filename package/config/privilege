@@ -1,0 +1,5 @@
+{
+  "defaults": {"run-as": "package"},
+  "username": "ai-workstation",
+  "groupname": "ai-workstation"
+}

@@ -1,0 +1,229 @@
+[
+  {
+    "stepTitle": "Strata 功能与推理设置",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "选择要调整的项目。应用运行时，保存会重新加载模型。"
+      },
+      {
+        "type": "select",
+        "field": "wizard_search",
+        "label": "联网搜索",
+        "initValue": "keep",
+        "options": [
+          {
+            "label": "沿用当前设置",
+            "value": "keep"
+          },
+          {
+            "value": "on",
+            "label": "开启"
+          },
+          {
+            "value": "off",
+            "label": "关闭"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "field": "wizard_mtp",
+        "label": "MTP 推测解码",
+        "initValue": "keep",
+        "options": [
+          {
+            "label": "沿用当前设置",
+            "value": "keep"
+          },
+          {
+            "value": "on",
+            "label": "开启"
+          },
+          {
+            "value": "off",
+            "label": "关闭"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "field": "wizard_context",
+        "label": "上下文上限",
+        "initValue": "keep",
+        "options": [
+          {
+            "label": "沿用当前设置",
+            "value": "keep"
+          },
+          {
+            "value": "8192",
+            "label": "8K"
+          },
+          {
+            "value": "32768",
+            "label": "32K"
+          },
+          {
+            "value": "65536",
+            "label": "64K"
+          },
+          {
+            "value": "131072",
+            "label": "128K"
+          },
+          {
+            "value": "262144",
+            "label": "256K"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "field": "wizard_kv",
+        "label": "KV 缓存格式",
+        "initValue": "keep",
+        "options": [
+          {
+            "label": "沿用当前设置",
+            "value": "keep"
+          },
+          {
+            "value": "int8",
+            "label": "INT8"
+          },
+          {
+            "value": "fp16",
+            "label": "FP16"
+          },
+          {
+            "value": "q4_0",
+            "label": "Q4"
+          },
+          {
+            "value": "k8v4",
+            "label": "K8 / V4"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "field": "wizard_kv_resident",
+        "label": "显存常驻 KV",
+        "initValue": "keep",
+        "options": [
+          {
+            "label": "沿用当前设置",
+            "value": "keep"
+          },
+          {
+            "value": "4096",
+            "label": "4K"
+          },
+          {
+            "value": "8192",
+            "label": "8K"
+          },
+          {
+            "value": "16384",
+            "label": "16K"
+          },
+          {
+            "value": "32768",
+            "label": "32K"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "field": "wizard_prefill",
+        "label": "预填充批次",
+        "initValue": "keep",
+        "options": [
+          {
+            "label": "沿用当前设置",
+            "value": "keep"
+          },
+          {
+            "value": "512",
+            "label": "512"
+          },
+          {
+            "value": "1024",
+            "label": "1,024"
+          },
+          {
+            "value": "2048",
+            "label": "2,048"
+          },
+          {
+            "value": "4096",
+            "label": "4,096"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "field": "wizard_experts",
+        "label": "显存专家缓存数量",
+        "initValue": "",
+        "placeholder": "留空沿用当前值"
+      },
+      {
+        "type": "text",
+        "field": "wizard_ram",
+        "label": "内存常驻预算（GiB）",
+        "initValue": "",
+        "placeholder": "留空沿用当前值"
+      },
+      {
+        "type": "text",
+        "field": "wizard_spec",
+        "label": "MTP 草稿 token 数",
+        "initValue": "",
+        "placeholder": "留空沿用当前值"
+      },
+      {
+        "type": "select",
+        "field": "wizard_mmap",
+        "label": "专家权重内存映射",
+        "initValue": "keep",
+        "options": [
+          {
+            "label": "沿用当前设置",
+            "value": "keep"
+          },
+          {
+            "value": "on",
+            "label": "开启"
+          },
+          {
+            "value": "off",
+            "label": "关闭"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "field": "wizard_cache_size",
+        "label": "会话缓存（MiB）",
+        "initValue": "",
+        "placeholder": "留空沿用当前值"
+      },
+      {
+        "type": "text",
+        "field": "wizard_cache_slots",
+        "label": "会话缓存槽位",
+        "initValue": "",
+        "placeholder": "留空沿用当前值"
+      },
+      {
+        "type": "text",
+        "field": "wizard_cache_free",
+        "label": "会话缓存保留可用内存（MiB）",
+        "initValue": "",
+        "placeholder": "留空沿用当前值"
+      }
+    ]
+  }
+]

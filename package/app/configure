@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+umask 077
+
+base=/var/apps/ai-workstation
+if [ ! -d "$base/var/engines/strata/native" ]; then
+    echo 'Start Strata once in fnOS App Center first.' >&2
+    exit 1
+fi
+if [ "$(id -u)" = 0 ]; then
+    exec /usr/sbin/runuser -u ai-workstation -- "$base/target/configure" "$@"
+fi
+
+export TRIM_PKGVAR="$base/var/engines/strata" TRIM_PKGETC="$base/etc/engines/strata"
+exec /usr/bin/python3 -B "$base/target/engines/strata/configure_env.py" "$@"

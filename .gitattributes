@@ -1,0 +1,4 @@
+* text=auto
+package/cmd/* text eol=lf
+package/app/configure text eol=lf
+*.py text eol=lf

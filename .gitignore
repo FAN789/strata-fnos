@@ -1,0 +1,6 @@
+*.fpk
+*.fpk.sha256
+*.tar.gz
+/build/
+__pycache__/
+*.py[cod]
