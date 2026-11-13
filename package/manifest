@@ -1,5 +1,5 @@
 appname = ai-workstation
-version = 1.0
+version = 1.0.1
 display_name = Strata
 desc = Strata 本地对话与推理
 platform = x86
