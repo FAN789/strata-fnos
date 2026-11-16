@@ -18,11 +18,10 @@ STRATA = ROOT / "upstream-integration"
 if not STRATA.is_dir():
     STRATA = WORKSPACE / "302-strata/fnos-fpk"
 
-CONTROL_SHA256 = "73fb612848cf00fa1072623029b35405bbbb63e3f4c688fe6f38c78e3fc022ac"
-ENGINE_SHA256 = "42ab04fa3201e41bef5fac28c05f5c35c909419ec937d879b505bf1516742610"
-LLAMA_COMMIT = "3cf03257f219afbe7334045ff7c6a06ac68c627d"
-LLAMA_SHA256 = "c076d7534afa0e5d0ec2a0d425b11e791c16f3de0d727221aea071cef156a280"
-ENGINE_DIR = "components/engine/0.1.59-linux-x86_64-cuda13"
+CONTROL_ASSET = "strata-control-0.1.60.1-linux-x86_64.tar.gz"
+CONTROL_SHA256 = "2c064953eeff70e805296f7c824258d12e20d9315d435397b599240e1f2cf110"
+ENGINE_SHA256 = "a72c194c8f6de96629ed53079b5e344ab81223d45667a53f6a6d79398895aa50"
+ENGINE_DIR = "components/engine/0.1.60-linux-x86_64-cuda13"
 
 
 def add_bytes(archive, name, data, mode=0o644):
@@ -45,6 +44,7 @@ def workstation_launcher(path):
 
 
 ''' + source[last:]
+    source = patch_import(source, 'APP / "components/engine/0.1.59-linux-x86_64-cuda13"', f'APP / "{ENGINE_DIR}"')
     return source.replace("API_PORT = 18082", "API_PORT = 18180").encode()
 
 
@@ -61,17 +61,6 @@ def patch_import(source, old, new):
     updated = source.replace(old, new)
     ast.parse(updated)
     return updated
-
-
-def add_gguf_python(bundle, source):
-    prefix = f"llama.cpp-{LLAMA_COMMIT}/gguf-py/"
-    with tarfile.open(source, "r|gz") as archive:
-        for member in archive:
-            if not member.isfile() or not member.name.startswith(prefix):
-                continue
-            name = member.name.removeprefix(prefix)
-            if name == "LICENSE" or (name.startswith("gguf/") and ".." not in PurePosixPath(name).parts):
-                add_bytes(bundle, f"engines/strata/control/gguf-py/{name}", archive.extractfile(member).read())
 
 
 def add_upstream(bundle, source, folder):
@@ -96,16 +85,6 @@ def add_upstream(bundle, source, folder):
                 code = archive.extractfile(member).read().decode()
                 add_bytes(bundle, target, patch_server(code).encode())
                 continue
-            if folder == "control" and name == "setup.py":
-                code = archive.extractfile(member).read().decode()
-                old = '    gguf_py = (env or {}).get("STRATA_GGUF_PY")\n'
-                new = old + '''    bundled_gguf = ROOT / "gguf-py"
-    if gguf_py and (bundled_gguf / "gguf" / "__init__.py").is_file():
-        env = dict(env, STRATA_GGUF_PY=str(bundled_gguf))
-        gguf_py = str(bundled_gguf)
-'''
-                add_bytes(bundle, target, patch_import(code, old, new).encode())
-                continue
             if folder == "control" and name == "tools/iq_pack.py":
                 code = archive.extractfile(member).read().decode()
                 old = '    ap.add_argument("--compat-bf16", action="store_true",\n'
@@ -118,10 +97,9 @@ def add_upstream(bundle, source, folder):
             bundle.addfile(member, archive.extractfile(member) if member.isfile() else None)
 
 
-def build(control, engine, search_runtime, llama_source):
+def build(control, engine, search_runtime):
     require_sha256(control, CONTROL_SHA256)
     require_sha256(engine, ENGINE_SHA256)
-    require_sha256(llama_source, LLAMA_SHA256)
     manifest = (PACKAGE / "manifest").read_text(encoding="utf-8")
     version = next(line.partition("=")[2].strip() for line in manifest.splitlines() if line.startswith("version "))
     output = ROOT / f"strata-fnos-{version}.fpk"
@@ -197,7 +175,6 @@ def configure(args):''')
 '''
             add_bytes(bundle, "engines/strata/configure_model.py", patch_import(code, old, new).encode())
             add_upstream(bundle, control, "control")
-            add_gguf_python(bundle, llama_source)
             add_upstream(bundle, engine, ENGINE_DIR)
         staged = Path(work) / output.name
         # app.tgz is already compressed. Recompressing it offers little gain.
@@ -228,6 +205,5 @@ if __name__ == "__main__":
     parser.add_argument("--control", required=True, type=Path, help="Official Strata Control archive")
     parser.add_argument("--engine", required=True, type=Path, help="Official Strata CUDA 13 engine archive")
     parser.add_argument("--search-runtime", required=True, type=Path, help="Archive containing the Python MCP tool dependencies")
-    parser.add_argument("--llama-source", required=True, type=Path, help="Pinned llama.cpp source archive containing gguf-py")
     args = parser.parse_args()
-    build(args.control, args.engine, args.search_runtime, args.llama_source)
+    build(args.control, args.engine, args.search_runtime)

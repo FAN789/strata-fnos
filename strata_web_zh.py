@@ -257,6 +257,10 @@ def patch_web(name, payload):
         source = mark_html(source)
     elif name == "app.js":
         source = patch_chat(source)
+        opt_in = 'if (settings.mcp !== false && mcpInfo.tools > 0) body.strata_mcp = true;'
+        if source.count(opt_in) != 1:
+            raise ValueError("Unexpected Strata chat search setting")
+        source = source.replace(opt_in, 'body.strata_mcp = settings.mcp !== false;')
     elif name == "monitor.js":
         source = patch_monitor(source)
     return source.encode("utf-8")
