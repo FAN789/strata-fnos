@@ -2,6 +2,7 @@
 import argparse
 import ast
 import hashlib
+from html import escape
 import io
 from pathlib import Path, PurePosixPath
 import tarfile
@@ -18,6 +19,7 @@ STRATA = ROOT / "upstream-integration"
 if not STRATA.is_dir():
     STRATA = WORKSPACE / "302-strata/fnos-fpk"
 
+UPSTREAM_RELEASE = "v0.2.14"
 CONTROL_ASSET = "strata-control-0.1.60.1-linux-x86_64.tar.gz"
 CONTROL_SHA256 = "2c064953eeff70e805296f7c824258d12e20d9315d435397b599240e1f2cf110"
 ENGINE_SHA256 = "a72c194c8f6de96629ed53079b5e344ab81223d45667a53f6a6d79398895aa50"
@@ -109,7 +111,11 @@ def build(control, engine, search_runtime):
             app_source = PACKAGE / "app"
             add_bytes(bundle, "strata_workstation.py", (app_source / "strata_workstation.py").read_bytes())
             add_bytes(bundle, "strata_setup.py", (app_source / "strata_setup.py").read_bytes())
-            add_bytes(bundle, "strata-setup.html", (app_source / "strata-setup.html").read_bytes())
+            setup_page = (app_source / "strata-setup.html").read_text(encoding="utf-8")
+            version_label = escape(f"{UPSTREAM_RELEASE} · 飞牛版 v{version}")
+            setup_page = setup_page.replace("<!-- STRATA_VERSIONS -->",
+                                            f'<span class="brand-version">{version_label}</span>', 1)
+            add_bytes(bundle, "strata-setup.html", setup_page.encode("utf-8"))
             add_bytes(bundle, "strata_settings.py", (app_source / "strata_settings.py").read_bytes())
             add_bytes(bundle, "strata-wizard.json", (PACKAGE / "wizard/config").read_bytes())
             add_bytes(bundle, "configure", (app_source / "configure").read_bytes(), mode=0o755)

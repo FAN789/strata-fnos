@@ -37,6 +37,8 @@
           margin-bottom: 12px; padding: clamp(14px, 3vw, 22px); border-radius: 16px; color: var(--hero-ink);
           background: linear-gradient(125deg, var(--hero) 25%, var(--hero-edge) 100%) }
   .brand { display: flex; align-items: center; gap: 15px }
+  .brand-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 10px }
+  .brand-version { color: var(--hero-muted); font-size: .88rem; font-variant-numeric: tabular-nums }
   .brand-mark { width: 47px; height: 47px; flex: 0 0 auto; display: grid; place-items: center;
                 border: 1px solid #ffffff57; border-radius: 14px; background: #ffffff18; color: #b9d8ff }
   .brand-mark::before { content: ""; width: 26px; height: 26px; background: currentColor;
@@ -124,7 +126,13 @@
   <header class="hero">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"></span>
-      <div><h1>Strata</h1><p class="brand-caption">模型管理</p></div>
+      <div>
+        <div class="brand-title">
+          <h1>Strata</h1>
+          <!-- STRATA_VERSIONS -->
+        </div>
+        <p class="brand-caption">模型管理</p>
+      </div>
     </div>
     <div class="hero-status">
       <p id="state" role="status">正在连接 Strata…</p>
