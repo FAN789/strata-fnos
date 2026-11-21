@@ -117,16 +117,16 @@
             "value": "keep"
           },
           {
-            "value": "4096",
-            "label": "4K"
+            "value": "0",
+            "label": "关闭"
           },
           {
-            "value": "8192",
-            "label": "8K"
+            "value": "20480",
+            "label": "20,480"
           },
           {
-            "value": "16384",
-            "label": "16K"
+            "value": "65536",
+            "label": "65,536"
           },
           {
             "value": "32768",
@@ -166,13 +166,6 @@
         "type": "text",
         "field": "wizard_experts",
         "label": "显存专家缓存数量",
-        "initValue": "",
-        "placeholder": "留空沿用当前值"
-      },
-      {
-        "type": "text",
-        "field": "wizard_ram",
-        "label": "内存常驻预算（GiB）",
         "initValue": "",
         "placeholder": "留空沿用当前值"
       },

@@ -6,6 +6,15 @@ import re
 
 
 STATIC = {
+    "Cached": "已缓存",
+    "Answer": "已生成",
+    "Free": "剩余",
+    "Averages start with the first request.": "完成首个请求后显示平均速度。",
+    "Prompt tokens the engine already had in its cache, so they were not read again.": "引擎已缓存的提示 token，无需再次读取。",
+    "Prompt tokens being read now.": "当前正在读取的提示 token。",
+    "Tokens of the answer written so far.": "本次回答已经生成的 token。",
+    "Room left in this model’s context window.": "当前模型上下文窗口中的剩余容量。",
+    "The context window this model runs with, and the engine's version.": "当前模型的上下文容量和推理引擎版本。",
     "Make an image": "生成图片",
     "Describe the image…": "描述你想生成的图片…",
     "Prompt": "提示词",
@@ -46,7 +55,9 @@ STATIC = {
     "Their tools run on this PC with your rights, when the model decides to call them (in this page's chat only; switch it off in Sampling).": "模型需要时会在本机调用 MCP 工具。可在聊天设置中关闭此功能。",
     "Model and engine": "模型与引擎",
     "This PC": "本机硬件",
-    "Connect your tools": "连接其他客户端",
+    "Connect your tools": "API 工具",
+    "Copy API key": "复制 API 密钥",
+    "Enter the API key in Settings first.": "请先在设置中填写 API 密钥。",
     "Any OpenAI- or Anthropic-compatible client works with these addresses.": "支持 OpenAI 或 Anthropic 接口的客户端可使用以下地址。",
     "Settings": "设置",
     "API key": "API 密钥",
@@ -254,9 +265,46 @@ def patch_web(name, payload):
             source = source.replace('<script defer src="/web/monitor.js">', '<script defer src="/web/i18n.js"></script>\n<script defer src="/web/monitor.js">')
         else:
             source = source.replace("Chat, its settings and the buttons above are translated. The Monitor, Images and About views are still in English.", "Choose the language for the web interface.")
+            api_facts = '<dl class="facts" id="facts-api"></dl>'
+            if source.count(api_facts) != 1:
+                raise ValueError("Unexpected Strata API tools card")
+            source = source.replace(api_facts, api_facts + '''
+        <dl class="facts">
+          <dt><span data-i18n="fnos.API key">API key</span></dt>
+          <dd><code id="api-key-summary" aria-hidden="true">••••••••</code>
+            <button class="st-btn st-btn--icon" id="copy-api-key" type="button"
+                    aria-label="Copy API key" data-i18n-label="fnos.Copy API key"></button>
+          </dd>
+        </dl>''', 1)
         source = mark_html(source)
     elif name == "app.js":
         source = patch_chat(source)
+        copy_hook = '$("api-key").onchange = () => saveApiKey(true);'
+        if source.count(copy_hook) != 1:
+            raise ValueError("Unexpected Strata API key input")
+        source = source.replace(copy_hook, copy_hook + '''
+$("copy-api-key").innerHTML = icon("copy");
+$("copy-api-key").onclick = (event) => {
+  if (!apiKey) {
+    toast("error", fnText("Enter the API key in Settings first."));
+    return;
+  }
+  copyText(apiKey, event.currentTarget);
+};''', 1)
+        fallback = 'ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();'
+        if source.count(fallback) != 1:
+            raise ValueError("Unexpected Strata clipboard fallback")
+        source = source.replace(fallback, '''ta.value = text;
+    ta.style.cssText = "position:fixed;left:-9999px;top:0";
+    document.body.appendChild(ta);
+    let copied = false;
+    try { ta.select(); copied = document.execCommand("copy"); }
+    catch (_) {}
+    finally { ta.remove(); }
+    if (!copied) {
+      toast("error", fnText("Clipboard unavailable; select the text to copy it."));
+      return;
+    }''', 1)
         opt_in = 'if (settings.mcp !== false && mcpInfo.tools > 0) body.strata_mcp = true;'
         if source.count(opt_in) != 1:
             raise ValueError("Unexpected Strata chat search setting")
@@ -267,6 +315,10 @@ def patch_web(name, payload):
 
 
 TEMPLATES = {
+    "monitor.context": ("{count} context", "{count} 上下文"),
+    "monitor.engine": ("engine v{version}", "引擎 v{version}"),
+    "monitor.pcieMax": (" of x{count}", " / 最高 x{count}"),
+    "monitor.pcieRate": ("to GPU {rate}", "传入 GPU {rate}"),
     "age.minutes": ("{count} min ago", "{count} 分钟前"),
     "age.hours": ("{count} h ago", "{count} 小时前"),
     "cache.summary": ("{reused} of {total} requests reused part of their prompt", "{total} 个请求中有 {reused} 个复用了部分提示词"),
@@ -350,6 +402,8 @@ const fnState = (code, fallback) => tr("fnos.state." + code, fallback);
     source = source.replace('"use strict";', '"use strict";\n' + helper, 1)
     start, end = source.index("function since("), source.index("// ------------------------------------------------------------------ Markdown")
     region = source[start:end]
+    region = region.replace('>Averages start with the first request.</span>',
+                            '>${esc(fnText("Averages start with the first request."))}</span>')
     for old, (name, values) in CHAT_TEMPLATES.items():
         region = region.replace(old, call(name, values))
     cache_event = "{count:fmt(c.last_tokens),age:since(c.last_at)}"
@@ -427,6 +481,11 @@ const fnState = (code, fallback) => tr("fnos.state." + code, fallback);
     source = source.replace('img.alt = "Image unavailable; try refreshing"', 'img.alt = fnText("Image unavailable; try refreshing")')
     source = source.replace('${fmt(t.ms / 1000, 1)} s', '${' + call("monitor.duration", "{seconds:fmt(t.ms / 1000, 1)}") + '}')
     source = patch_chat_metadata(source)
+    source = source.replace('`${ctxfmt(eng.max_context)} context`', call("monitor.context", "{count:ctxfmt(eng.max_context)}"))
+    source = source.replace('`engine v${eng.version}`', call("monitor.engine", "{version:eng.version}"))
+    source = source.replace('` of x${g.pcie_width_max}`', call("monitor.pcieMax", "{count:g.pcie_width_max}"))
+    source = source.replace('` of x${one.width_max}`', call("monitor.pcieMax", "{count:one.width_max}"))
+    source = source.replace('`to GPU ${rx}`', call("monitor.pcieRate", "{rate:rx}"))
     return source
 
 

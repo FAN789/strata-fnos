@@ -21,8 +21,10 @@ import threading
 import time
 from urllib.parse import parse_qs, urlsplit
 
-from strata_settings import (NUMBERS, atomic, candidate, readback, search_config, search_proxy,
+from strata_settings import (NUMBERS, arg_value, atomic, candidate, readback, search_config, search_proxy,
                              validate_values, watch_wizard)
+import strata_options
+from strata_runtime import snapshot
 
 
 APP = Path(__file__).resolve().parent
@@ -78,6 +80,16 @@ class Setup:
         self.start_deadline = 0
         self.notice = ""
         self.state = "starting" if engine.PROFILE.is_file() else "empty"
+        self.runtime_lock = threading.Lock()
+        self.runtime_at = 0
+        self.runtime_snapshot = {}
+
+    def runtime(self):
+        with self.runtime_lock:
+            if not self.runtime_snapshot or time.monotonic() - self.runtime_at >= 8:
+                self.runtime_snapshot = snapshot(self.engine)
+                self.runtime_at = time.monotonic()
+            return self.runtime_snapshot
 
     def profile(self):
         path = self.engine.PROFILE
@@ -162,20 +174,64 @@ class Setup:
         values, _ = readback(raw)
         steps = json.loads((APP / "strata-wizard.json").read_bytes())
         items = []
+        items.append({"id": "shell", "label": "Shell 命令权限", "value": values.get("shell", "off"),
+                      "options": [{"value": "off", "label": "关闭"}, {"value": "on", "label": "开启"}]})
         for step in steps:
             for item in step["items"]:
                 if "field" not in item:
                     continue
                 name = item["field"].removeprefix("wizard_")
+                if name == "ram":
+                    continue
                 entry = {"id": name, "label": item["label"], "value": values.get(name, "")}
                 if "options" in item:
                     entry["options"] = [choice for choice in item["options"] if choice["value"] != "keep"]
+                    if name == "prefill":
+                        entry["options"].insert(0, {"value": "auto", "label": "自动"})
+                        entry["options"].append({"value": "8192", "label": "8,192"})
+                    if name == "kv_resident":
+                        entry["options"] = [{"value": value, "label": label} for value, label in
+                                            [("0", "关闭"), ("20480", "20,480"), ("32768", "32,768"), ("65536", "65,536")]]
                 else:
                     _, entry["min"], entry["max"] = NUMBERS[name]
+                if name == "experts":
+                    entry["type"] = "text"
+                    entry["placeholder"] = "0（引擎默认）"
+                    entry["help"] = "auto 为自动分配显存专家缓存；也可填写专家数量。"
+                elif name == "ram":
+                    entry["disabled"] = True
+                    entry["value"] = ""
+                    entry["placeholder"] = "当前引擎自动管理"
+                    entry["help"] = "当前引擎已不提供旧的常驻预算参数。"
+                elif name in {"cache_size", "cache_slots", "cache_free"} and not entry["value"]:
+                    entry["placeholder"] = {"cache_size": "自动分配（最高 8192 MiB）",
+                                            "cache_slots": "4（引擎默认）",
+                                            "cache_free": "2560 MiB（引擎默认）"}[name]
+                    entry["help"] = "当前配置未单独指定；未修改时沿用引擎默认值。"
                 items.append(entry)
-        proxy = search_proxy(json.loads(raw))
+        profile = json.loads(raw)
+        items.extend(strata_options.fields(profile, arg_value))
+        shell_dirs = self.shell_directories(profile)
+        roots = self.roots()
+        items.append({"id": "shell_cwd", "label": "Shell 工作目录", "value": profile.get("_fnos_shell_cwd", "workspace"),
+                      "options": [{"value": "workspace", "label": "Strata 独立工作目录"}] +
+                                 [{"value": str(path), "label": roots.get(path, str(path))} for path in shell_dirs],
+                      "help": "从自定义候选列表选择默认位置。点“管理目录”可图形化添加或移除。"})
+        proxy = search_proxy(profile)
+        previous = self.engine.ETC / "previous-settings.json"
+        restorable = False
+        try:
+            restorable = self.active_id(json.loads(previous.read_bytes())) == self.active_id(profile)
+        except (OSError, ValueError):
+            pass
         return {"revision": hashlib.sha256(raw).hexdigest(), "items": items,
+                "presets": strata_options.PRESETS, "restorable": restorable, "runtime": self.runtime(),
+                "shell_dirs": [{"path": str(path), "label": roots.get(path, str(path)),
+                                "available": any(path.is_relative_to(root) for root in roots)
+                                and path.is_dir() and os.access(path, os.R_OK | os.X_OK)} for path in shell_dirs],
+                "shell_roots": [{"id": str(index), "label": label} for index, label in enumerate(roots.values())],
                 "search_proxy_mode": "inherit" if proxy is None else "custom" if proxy else "direct",
+                "search_proxy_url": proxy if isinstance(proxy, str) and len(proxy) <= 1024 else "",
                 "search_proxy_endpoint": proxy_endpoint(proxy) if proxy else ""}
 
     def save_settings(self, fields):
@@ -186,11 +242,27 @@ class Setup:
             raise ValueError("模型配置已变化，请重新打开运行设置。")
         profile = json.loads(raw)
         before = json.loads(raw)
+        if fields.get("action") == "restore":
+            previous = json.loads((self.engine.ETC / "previous-settings.json").read_bytes())
+            if self.active_id(previous) != self.active_id(profile):
+                raise ValueError("可恢复设置属于另一个模型。")
+            previous["api_key"] = self.engine.KEY.read_text().strip()
+            self.switch(previous, "恢复设置")
+            return
+        values = validate_values(fields)
+        directories = json.loads(values["shell_dirs"]) if "shell_dirs" in values else list(map(str, self.shell_directories(profile)))
+        if "shell_dirs" in values:
+            roots = self.roots()
+            if any(not any(Path(value).is_relative_to(root) for root in roots)
+                   or not os.access(value, os.R_OK | os.X_OK) for value in directories):
+                raise ValueError("请选择应用已获访问权限的目录。")
+        if values.get("shell_cwd", "workspace") != "workspace" and values["shell_cwd"] not in directories:
+            raise ValueError("请先把工作目录加入候选列表。")
         mtp_path = self.engine.ETC / "fnos-mtp-path"
         saved = profile.get("_fnos_mtp", "")
         if not saved and self.active_id(profile) == "original" and mtp_path.is_file():
             saved = mtp_path.read_text().strip()
-        path = candidate(profile, validate_values(fields), saved)
+        path = candidate(profile, values, saved, self.engine.PROFILE)
         if profile != before:
             if path:
                 profile["_fnos_mtp"] = path
@@ -211,6 +283,25 @@ class Setup:
             except (OSError, RuntimeError):
                 continue
         return roots
+
+    def shell_directories(self, profile):
+        # Old fnOS file grants are browse locations, not automatic Shell choices.
+        paths = profile.get("_fnos_shell_dirs", [])
+        paths = paths if isinstance(paths, list) else []
+        current = profile.get("_fnos_shell_cwd", "workspace")
+        if "_fnos_shell_dirs" not in profile and current != "workspace":
+            paths = [current]
+        return [Path(value) for value in paths[:16] if isinstance(value, str) and value.startswith("/vol")]
+
+    def directories(self, query):
+        folder = self.pick(query.get("root", ["0"])[0], query.get("path", [""])[0])
+        if not folder.is_dir():
+            raise ValueError("请选择目录。")
+        rows = [{"name": row["name"], "path": str(folder / row["name"])} for row in self.browse(query) if row["directory"]]
+        return {"path": str(folder), "directories": rows}
+
+    def directory_roots(self):
+        return [{"id": str(index), "label": label} for index, (path, label) in enumerate(self.roots().items())]
 
     def pick(self, root, path):
         parts = Path(path).parts
@@ -396,11 +487,13 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
 
-    def send(self, status, value):
+    def send(self, status, value, content_type=None):
         if isinstance(value, bytes):
             kind, body = "text/html; charset=utf-8", value
         else:
             kind, body = "application/json; charset=utf-8", json.dumps(value, ensure_ascii=False).encode()
+        if content_type is not None:
+            kind = content_type
         self.send_response(status)
         self.send_header("Content-Type", kind)
         self.send_header("Cache-Control", "no-store")
@@ -426,12 +519,22 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path in {"", "/"}:
                 self.send(200, (APP / "strata-setup.html").read_bytes())
+            elif path in {"/ui-assets/strata-theme.css", "/ui-assets/strata-console.css", "/ui-assets/strata-console.js"}:
+                asset = APP / "ui-assets" / path.rsplit("/", 1)[1]
+                kind = "text/css; charset=utf-8" if asset.suffix == ".css" else "text/javascript; charset=utf-8"
+                self.send(200, asset.read_bytes(), content_type=kind)
             elif path == "/status":
                 self.send(200, {**setup.status(), "csrf": setup.token})
             elif path == "/browse":
                 self.send(200, setup.browse(parse_qs(url.query)))
+            elif path == "/directories":
+                self.send(200, setup.directories(parse_qs(url.query)))
+            elif path == "/directory-roots":
+                self.send(200, setup.directory_roots())
             elif path == "/settings" and setup.engine.PROFILE.is_file():
                 self.send(200, setup.settings())
+            elif path == "/runtime":
+                self.send(200, setup.runtime())
             else:
                 self.send(404, {"error": "页面不存在。"})
         except (OSError, ValueError, RuntimeError):
@@ -453,8 +556,10 @@ class Handler(BaseHTTPRequestHandler):
             if path not in {"/import", "/activate", "/settings"} or not 0 < size <= 8192 or self.headers.get_content_type() != "application/json":
                 raise ValueError("请求无效。")
             fields = json.loads(self.rfile.read(size))
-            if not isinstance(fields, dict) or any(not isinstance(value, str) for key, value in fields.items() if key != "bf16"):
+            if not isinstance(fields, dict):
                 raise ValueError("模型选择无效。")
+            if any(not isinstance(value, str) for key, value in fields.items() if key != "bf16"):
+                raise ValueError("设置格式无效。")
             with setup.lock:
                 if path == "/import":
                     setup.import_model(fields)
@@ -600,6 +705,8 @@ def supervise_workstation(engine):
                     try:
                         with engine.OPENER.open(f"http://127.0.0.1:{engine.API_PORT}/health", timeout=0.5) as reply:
                             if json.load(reply).get("loaded"):
+                                if setup.change and setup.change[0] and setup.change[1] == "保存设置":
+                                    atomic(engine.ETC / "previous-settings.json", setup.encode_profile(setup.change[0]))
                                 pending.unlink(missing_ok=True)
                                 setup.state = "ready"
                                 setup.change = None

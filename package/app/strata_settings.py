@@ -11,18 +11,18 @@ import tempfile
 import time
 from urllib.request import ProxyHandler, build_opener
 from urllib.parse import urlsplit
+import strata_options
 
 
 APP = Path(__file__).resolve().parent
 CHOICES = {
     "context": ("--max-context", {"8192", "32768", "65536", "131072", "262144"}),
     "kv": ("--kv", {"int8", "fp16", "q4_0", "k8v4"}),
-    "kv_resident": ("--kv-resident", {"4096", "8192", "16384", "32768"}),
-    "prefill": ("--prefill", {"512", "1024", "2048", "4096"}),
+    "kv_resident": ("--kv-resident", {"0", "20480", "32768", "65536"}),
+    "prefill": ("--prefill", {"auto", "512", "1024", "2048", "4096", "8192"}),
 }
 NUMBERS = {
     "experts": ("--expert-cache", 0, 20000),
-    "ram": ("--resident-budget-gib", 1, 90),
     "spec": ("--spec", 1, 16),
     "cache_size": ("--conversation-cache-mib", 0, 16384),
     "cache_slots": ("--conversation-cache-slots", 0, 8),
@@ -63,6 +63,8 @@ def fields(revision):
 
 def validate_values(submitted):
     values = {}
+    if submitted.get("ram", "").strip():
+        raise ValueError("旧版内存常驻预算已停用，请在控制台设置系统预留内存。")
 
     def read(name):
         return submitted.get(name, "").strip()
@@ -75,10 +77,13 @@ def validate_values(submitted):
     for name, (_, low, high) in NUMBERS.items():
         raw = read(name)
         if raw:
+            if name == "experts" and raw == "auto":
+                values[name] = raw
+                continue
             if len(raw) > 8 or not raw.isascii() or not raw.isdecimal() or not low <= int(raw) <= high:
                 raise ValueError(f"{name} 须为 {low} 到 {high} 的整数")
             values[name] = str(int(raw))
-    for name in ("search", "mtp", "mmap"):
+    for name in ("search", "mtp", "mmap", "shell"):
         raw = read(name)
         if raw and raw != "keep":
             if raw not in ("on", "off"):
@@ -94,18 +99,21 @@ def validate_values(submitted):
         raw = read("search_proxy_url")
         if raw:
             values["search_proxy_url"] = validate_search_proxy(raw)
+    values.update(strata_options.validate(submitted))
     return values
 
 
 def arg_value(args, flag):
-    if flag in args:
-        i = args.index(flag) + 1
-        if i < len(args) and not args[i].startswith("--"):
-            return args[i]
+    for i in range(len(args) - 1, -1, -1):
+        if args[i].startswith(flag + "="):
+            return args[i].split("=", 1)[1]
+        if args[i] == flag and i + 1 < len(args) and not args[i + 1].startswith("--"):
+            return args[i + 1]
     return None
 
 
 def set_arg(args, flag, value=None, *, switch=False):
+    args[:] = [arg for arg in args if not arg.startswith(flag + "=")]
     if args.count(flag) <= 1:
         if switch and (flag in args) == bool(value):
             return
@@ -136,6 +144,17 @@ def search_proxy(profile, server=None):
     return next((env[key] for key in PROXY_KEYS[1:] if env.get(key)), None)
 
 
+def shell_config(profile_path=None):
+    if profile_path is None:
+        folder = Path(os.environ["TRIM_PKGETC"])
+        if folder.parts[-2:] != ("engines", "strata"):
+            folder = folder / "engines/strata"
+        profile_path = folder / "model.json"
+    path = Path(profile_path)
+    return {"command": "/usr/bin/python3", "args": ["-B", str(APP / "strata_shell.py"), str(path)],
+            "env": {"PYTHONPATH": str(APP / "public-search/vendor"), "PYTHONNOUSERSITE": "1"}}
+
+
 def search_config(previous=None):
     directory = APP / "public-search"
     if not (directory / "search.py").is_file() or not (directory / "vendor/mcp").is_dir():
@@ -146,9 +165,19 @@ def search_config(previous=None):
             "env": env}
 
 
-def candidate(profile, values, mtp_saved):
+def candidate(profile, values, mtp_saved, profile_path=None):
     args = profile["args"]
     mtp_path = arg_value(args, "--mtp") or mtp_saved
+    if "shell" in values:
+        servers = search_servers(profile)
+        if values["shell"] == "on":
+            profile["_fnos_shell"] = True
+            servers["strata_shell"] = shell_config(profile_path)
+        else:
+            profile["_fnos_shell"] = False
+            servers.pop("strata_shell", None)
+        profile.pop("mcpServers", None)
+        profile["mcp_servers"] = servers
     if "search" in values or "search_proxy_mode" in values:
         servers = search_servers(profile)
         previous = servers.get("public_search")
@@ -197,6 +226,7 @@ def candidate(profile, values, mtp_saved):
             set_arg(args, "--mtp", mtp_path if enabled else None)
             profile["drafting"] = "mtp" if enabled else "off"
             profile["mtp"] = enabled
+    strata_options.apply(profile, values, set_arg)
     args = profile["args"]
     resident = arg_value(args, "--kv-resident")
     context = arg_value(args, "--max-context")
@@ -227,6 +257,7 @@ def readback(raw):
     servers = profile.get("mcp_servers") or profile.get("mcpServers") or {}
     if profile:
         values.update(search="on" if "public_search" in servers else "off",
+                      shell="on" if profile.get("_fnos_shell") is True else "off",
                       mtp="on" if profile.get("drafting") == "mtp" or arg_value(args, "--draft") == "mtp" else "off",
                       mmap="on" if "--mmap-experts" in args else "off")
     revision = hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()[:12]
@@ -301,7 +332,7 @@ def apply(path, folder):
         profile = json.loads(original)
         mtp_file = path.with_name("fnos-mtp-path")
         saved = mtp_file.read_text().strip() if mtp_file.is_file() else ""
-        mtp_path = candidate(profile, values, saved)
+        mtp_path = candidate(profile, values, saved, path)
         if profile == previous:
             return
         running = run_action("status") == 0
@@ -328,12 +359,26 @@ def main():
     folder = Path(os.environ["TRIM_PKGETC"])
     path = folder / "engines/strata/model.json"
     if sys.argv[1] == "migrate":
-        if path.is_file():
-            profile = json.loads(path.read_bytes())
-            if "public_search" in (profile.get("mcp_servers") or {}):
+        for stored in [path, path.with_name("previous-settings.json"), *sorted((path.parent / "profiles").glob("*.json"))]:
+            if not stored.is_file():
+                continue
+            try:
+                original = json.loads(stored.read_bytes())
+            except (OSError, ValueError):
+                if stored == path:
+                    raise
+                continue
+            profile = json.loads(json.dumps(original))
+            if stored == path and "public_search" in (profile.get("mcp_servers") or {}):
                 servers = profile["mcp_servers"]
                 servers["public_search"] = search_config(servers["public_search"])
-                atomic(path, (json.dumps(profile, ensure_ascii=False, indent=2) + "\n").encode())
+            if profile.get("_fnos_shell") is True:
+                servers = search_servers(profile)
+                servers["strata_shell"] = shell_config(path)
+                profile.pop("mcpServers", None)
+                profile["mcp_servers"] = servers
+            if profile != original:
+                atomic(stored, (json.dumps(profile, ensure_ascii=False, indent=2) + "\n").encode())
         sync_wizard(path, folder)
         return
     if sys.argv[1] == "sync":
@@ -347,7 +392,7 @@ def main():
         raise ValueError("请先导入 Strata 模型。")
     if sys.argv[1] == "validate":
         saved = path.with_name("fnos-mtp-path")
-        candidate(json.loads(raw), values, saved.read_text().strip() if saved.is_file() else "")
+        candidate(json.loads(raw), values, saved.read_text().strip() if saved.is_file() else "", path)
     else:
         apply(path, folder)
 

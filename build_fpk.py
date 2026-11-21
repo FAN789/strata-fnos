@@ -10,6 +10,7 @@ import tempfile
 
 from strata_search_default import patch_server
 from strata_web_zh import patch_web
+from strata_ui import patch_ui
 
 
 ROOT = Path(__file__).resolve().parent
@@ -19,13 +20,11 @@ STRATA = ROOT / "upstream-integration"
 if not STRATA.is_dir():
     STRATA = WORKSPACE / "302-strata/fnos-fpk"
 
-UPSTREAM_RELEASE = "v0.2.14"
-CONTROL_ASSET = "strata-control-0.1.60.1-linux-x86_64.tar.gz"
-CONTROL_SHA256 = "2c064953eeff70e805296f7c824258d12e20d9315d435397b599240e1f2cf110"
-ENGINE_SHA256 = "a72c194c8f6de96629ed53079b5e344ab81223d45667a53f6a6d79398895aa50"
-ENGINE_DIR = "components/engine/0.1.60-linux-x86_64-cuda13"
-
-
+UPSTREAM_RELEASE = "v0.2.16"
+CONTROL_ASSET = "strata-control-0.1.62-linux-x86_64.tar.gz"
+CONTROL_SHA256 = "045b6a7d7fbfbddab814794db5763d6244c887a394403b9fe0e8a4714d9bef8c"
+ENGINE_SHA256 = "6723e1b6b6042bfe1d368723ebf873afb0fa65f4f1908d948dd865098f6cfb9e"
+ENGINE_DIR = "components/engine/0.1.62-linux-x86_64-cuda13"
 def add_bytes(archive, name, data, mode=0o644):
     item = tarfile.TarInfo(name)
     item.size = len(data)
@@ -81,7 +80,8 @@ def add_upstream(bundle, source, folder):
                 "serve/web/index.html", "serve/web/monitor.html", "serve/web/app.js",
                 "serve/web/monitor.js", "serve/web/locales/zh.json",
             }:
-                add_bytes(bundle, target, patch_web(name.removeprefix("serve/web/"), archive.extractfile(member).read()))
+                web_name = name.removeprefix("serve/web/")
+                add_bytes(bundle, target, patch_ui(web_name, patch_web(web_name, archive.extractfile(member).read())))
                 continue
             if folder == "control" and name == "serve/server.py":
                 code = archive.extractfile(member).read().decode()
@@ -117,6 +117,9 @@ def build(control, engine, search_runtime):
                                             f'<span class="brand-version">{version_label}</span>', 1)
             add_bytes(bundle, "strata-setup.html", setup_page.encode("utf-8"))
             add_bytes(bundle, "strata_settings.py", (app_source / "strata_settings.py").read_bytes())
+            add_bytes(bundle, "strata_shell.py", (app_source / "strata_shell.py").read_bytes())
+            add_bytes(bundle, "strata_options.py", (app_source / "strata_options.py").read_bytes())
+            add_bytes(bundle, "strata_runtime.py", (app_source / "strata_runtime.py").read_bytes())
             add_bytes(bundle, "strata-wizard.json", (PACKAGE / "wizard/config").read_bytes())
             add_bytes(bundle, "configure", (app_source / "configure").read_bytes(), mode=0o755)
             add_bytes(bundle, "public-search/search.py", (STRATA / "public_search.py").read_bytes())
@@ -126,15 +129,18 @@ def build(control, engine, search_runtime):
                         continue
                     data = runtime.extractfile(member).read()
                     add_bytes(bundle, "public-search/vendor/" + member.name.removeprefix("python/"), data)
-            for folder in ("ui", "licenses"):
+            for folder in ("ui", "ui-assets", "licenses"):
                 for path in sorted((app_source / folder).rglob("*")):
                     if path.is_file():
                         add_bytes(bundle, path.relative_to(app_source).as_posix(), path.read_bytes())
+            for name in ("strata-theme.css", "strata-ui.js"):
+                add_bytes(bundle, "engines/strata/control/serve/web/" + name, (app_source / "ui-assets" / name).read_bytes())
             integration = STRATA / "package/app"
             launcher = integration / "service.py"
             add_bytes(bundle, "engines/strata/service.py", workstation_launcher(launcher))
             add_bytes(bundle, "engines/strata/configure_env.py", (integration / "configure_env.py").read_bytes())
             code = (integration / "configure_model.py").read_text(encoding="utf-8")
+            code = patch_import(code, "if self.multi_file() or self.model_shape():", "if self.model_shape():")
             code = patch_import(code, "import json\n", "import json\nimport os\n")
             old = '''    model = Path(args.path).expanduser().resolve(strict=True)
     if not (model.is_dir() or model.is_file() and model.suffix.lower() == ".gguf"):

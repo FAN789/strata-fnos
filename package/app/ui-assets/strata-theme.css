@@ -1,0 +1,170 @@
+/* Strata: one type, colour and control vocabulary across the console and chat. */
+:root {
+  --st-font: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+  --st-font-mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --st-bg: #edf2f2; --st-surface: #ffffff; --st-surface-2: #f4f7f7;
+  --st-line: #cedadb; --st-line-soft: #e3eaea;
+  --st-ink: #1d2d36; --st-ink-soft: #344951; --st-ink-muted: #5a6d75; --st-icon: #49636d;
+  --st-accent: #167968; --st-accent-hover: #106453; --st-accent-ink: #ffffff;
+  --st-accent-tint: #e7f4ef; --st-accent-text: #126653; --st-focus: #247eaf;
+  --st-info: #267baf; --st-info-tint: #eaf3fa; --st-info-text: #21648e;
+  --st-warn: #ad741b; --st-warn-tint: #fff4df; --st-warn-text: #82550b;
+  --st-danger: #b74242; --st-danger-tint: #fceeee; --st-danger-text: #a63232;
+  --st-code-bg: #17242d; --st-code-ink: #e7eff1;
+  --st-rail: #18262e; --st-rail-ink: #e4eef0; --st-rail-muted: #afc0c7;
+  --st-fs-xs: 12px; --st-fs-sm: 13px; --st-fs-md: 14px; --st-fs-base: 15px;
+  --st-fs-lg: 18px; --st-fs-xl: 22px; --st-fs-stat: 28px; --st-fs-display: 32px;
+  --st-fw-regular: 400; --st-fw-medium: 500; --st-fw-bold: 650; --st-fw-black: 700;
+  --st-lh-tight: 1.3; --st-lh-body: 1.65;
+  --st-r-sm: 6px; --st-r-md: 8px; --st-r-lg: 10px; --st-r-xl: 12px; --st-r-pill: 5px;
+  --st-sh-card: none; --st-sh-bar: 0 4px 16px #18262e0a; --st-sh-pop: 0 12px 36px #18262e24;
+  --st-dur: 160ms; --st-ease: cubic-bezier(.16,1,.3,1);
+  color-scheme: light;
+  font: 15px/1.65 var(--st-font);
+}
+:root[data-theme="dark"] {
+  --st-bg: #111d23; --st-surface: #192830; --st-surface-2: #20333c;
+  --st-line: #3a515b; --st-line-soft: #2d424c;
+  --st-ink: #e8f0f2; --st-ink-soft: #cedde1; --st-ink-muted: #a8bec7; --st-icon: #b8cdd4;
+  --st-accent: #80d6b9; --st-accent-hover: #a4e5ce; --st-accent-ink: #102f26;
+  --st-accent-tint: #24463f; --st-accent-text: #a4e5ce; --st-focus: #87c7ee;
+  --st-info: #87c7ee; --st-info-tint: #203c50; --st-info-text: #a7d7f3;
+  --st-warn: #eac17b; --st-warn-tint: #463824; --st-warn-text: #f3cd8d;
+  --st-danger: #edaaaa; --st-danger-tint: #482d32; --st-danger-text: #ffc0c0;
+  --st-code-bg: #101a20; --st-code-ink: #e2eff2;
+  --st-rail: #0c171d; --st-rail-ink: #e4eef0; --st-rail-muted: #afc0c7;
+  --st-sh-pop: 0 12px 36px #00000050;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box }
+::selection { background: var(--st-accent-tint); color: var(--st-ink) }
+html { scrollbar-color: var(--st-line) var(--st-bg); scrollbar-width: thin }
+body, button, input, select, textarea { font-family: var(--st-font) }
+body { color: var(--st-ink); background: var(--st-bg); -webkit-font-smoothing: antialiased }
+input, textarea { caret-color: var(--st-accent); font-variant-numeric: tabular-nums }
+input::placeholder, textarea::placeholder { color: var(--st-ink-muted); opacity: 1 }
+input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--st-accent) }
+a { text-underline-offset: 3px }
+button, a, input, select, textarea, summary { -webkit-tap-highlight-color: transparent }
+:focus-visible { outline: 2px solid var(--st-focus); outline-offset: 3px }
+button:disabled, input:disabled, select:disabled { cursor: not-allowed }
+button, .st-btn { transition: background-color var(--st-dur) var(--st-ease), border-color var(--st-dur) var(--st-ease) }
+svg { flex-shrink: 0 }
+[hidden] { display: none !important }
+
+/* Upstream chat, monitor, settings drawer and About. IDs and behaviour remain upstream. */
+.st-header { min-height: 54px; height: auto; padding-block: 6px; background: var(--st-rail); color: var(--st-rail-ink); border: 0; gap: 18px }
+.st-header__brand { font: 650 24px/1.2 var(--st-font); letter-spacing: -.035em }
+.st-header .st-tabs { background: transparent; border: 0; padding: 0; gap: 4px; border-radius: 0 }
+.st-header .st-tab { color: var(--st-rail-muted); border-radius: 6px; padding-inline: 14px; font-weight: 500 }
+.st-header .st-tab:hover { color: var(--st-rail-ink); background: #ffffff0d }
+.st-header .st-tab[aria-selected="true"] { color: #fff; background: #2e5f57; box-shadow: none }
+.st-header .st-pill { color: var(--st-rail-ink); background: #ffffff08; border-color: #49616b; border-radius: 5px }
+.st-header .st-btn { color: var(--st-rail-ink); border-color: #49616b }
+.st-header .st-btn:hover { color: #fff; background: #ffffff12 }
+.st-header__console { color: var(--st-rail-ink); font-size: 13px; white-space: nowrap; padding: 6px 10px; border: 1px solid #49616b; border-radius: 5px }
+.st-header__console:hover { background: #ffffff12; color: #fff; text-decoration: none }
+.st-pill[data-state="reading"] .st-pill__dot, .st-pill[data-state="generating"] .st-pill__dot { box-shadow: none }
+.chat-scroll { background: var(--st-bg); scroll-padding-bottom: 20px }
+.chat { max-width: 980px; gap: 20px; padding: 20px 24px }
+.st-msg .st-bubble { font-size: 16px; line-height: 1.85 }
+.st-msg--user { max-width: min(85%, 750px); align-self: flex-end }
+.st-msg--user .st-bubble { border-radius: 10px; background: var(--st-surface); color: var(--st-ink); border: 1px solid var(--st-line); padding: 10px 14px }
+.st-msg--assistant .st-bubble { padding: 0 2px; background: transparent; border: 0; border-radius: 0; box-shadow: none }
+.st-msg__meta { font-size: 12px; color: var(--st-ink-muted); margin-top: 10px; font-variant-numeric: tabular-nums }
+.st-bubble > p { max-width: 75ch }
+.st-bubble .tool-call, .st-collapse { border-radius: 7px; background: var(--st-surface-2); box-shadow: none }
+.st-collapse > summary { font-size: 13px; font-weight: 500 }
+.st-collapse__body.thinking { font: 13px/1.8 var(--st-font) }
+.tool-call__preview { color: var(--st-ink-muted) }
+.composer-wrap { background: var(--st-bg); padding: 6px 20px 14px }
+.st-composer { max-width: 980px; padding: 13px 15px; border-radius: 10px; box-shadow: var(--st-sh-bar) }
+.st-composer textarea { font: 15px/1.7 var(--st-font); min-height: 56px; padding: 4px 3px }
+.st-composer:focus-within { border-color: var(--st-accent); box-shadow: 0 4px 16px #18262e0a }
+.st-composer__bar { border-top: 1px solid var(--st-line-soft); padding-top: 9px }
+.st-btn { height: 38px; font-weight: 600; border-radius: 6px; padding-inline: 14px }
+.st-btn--primary { box-shadow: none }
+.st-btn--icon { width: 36px; padding: 0 }
+.st-input { height: 40px; border-radius: 6px; background: var(--st-surface); border: 1px solid var(--st-line); font-weight: 400 }
+.st-input:focus { box-shadow: none; outline: 2px solid var(--st-focus); outline-offset: 2px }
+.st-card { border-radius: 9px; padding: 14px; box-shadow: none }
+.card-title { font-size: 16px; font-weight: 650 }
+.st-metric__value { font-size: 27px; font-weight: 600; letter-spacing: -.025em }
+.metrics .model-card__name { font-size: 15px; font-weight: 600; line-height: 1.7; letter-spacing: 0 }
+.badges .st-badge { opacity: 1 }
+.badges .st-badge:not(.on) { color: var(--st-ink-muted); background: transparent; border-color: var(--st-line); font-weight: 400 }
+.st-badge { font-size: 12px; font-weight: 500; border-radius: 4px; padding: 0 8px }
+.st-table th { letter-spacing: 0; text-transform: none; font-size: 12px }
+.st-table td { padding-block: 11px }
+.monitor, .about { padding: 16px; gap: 12px }
+.monitor { max-width: 1600px }
+.metrics { grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 10px }
+.view--about .about { max-width: 1320px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; align-items: start }
+.about .cfg-card { grid-column: 1 / -1 }
+.facts { grid-template-columns: minmax(95px, max-content) minmax(0, 1fr); gap: 6px 12px }
+.facts dd { min-width: 0; flex-wrap: wrap }
+.cfg-form { grid-template-columns: minmax(0, 1fr) minmax(160px, 300px) }
+.st-drawer { width: 420px; max-width: 100%; border-radius: 0; box-shadow: var(--st-sh-pop) }
+.st-drawer__head { padding: 12px 16px; min-height: 54px }
+.st-drawer__body { padding: 14px 16px; gap: 14px }
+.st-field .muted.small, .toggle-row .muted.small { line-height: 1.65; margin-top: 5px; display: inline-block }
+.seg { border-radius: 6px; padding: 3px; gap: 3px }
+.seg button { border-radius: 4px; font-weight: 500 }
+.seg button[aria-checked="true"] { background: var(--st-accent-tint); color: var(--st-accent-text); box-shadow: none }
+.drawer-group { border-top: 1px solid var(--st-line); padding-top: 12px }
+.drawer-group__title { font-size: 15px; font-weight: 650 }
+.drawer-actions { position: sticky; bottom: -14px; background: var(--st-surface); padding-block: 12px; margin: 0 -4px }
+.chat-sidebar { background: var(--st-surface); border-color: var(--st-line) }
+.chat-empty__title { font-size: 30px; font-weight: 600 }
+.chat-empty__sub { max-width: 50ch; font-size: 14px; line-height: 1.8 }
+.st-toasts { max-width: calc(100vw - 24px) }
+.st-toast { box-shadow: var(--st-sh-pop); border-radius: 7px }
+
+/* Dedicated API monitor shares the same vocabulary. */
+body.strata-api-monitor > header { height: auto; min-height: 66px; padding: 14px 28px; background: var(--st-rail); color: var(--st-rail-ink); gap: 16px; flex-wrap: wrap }
+.strata-api-monitor .brand span { color: var(--st-rail-muted) }
+.strata-api-monitor > header button { color: var(--st-rail-ink); border-color: #49616b; background: transparent }
+.strata-api-monitor main { max-width: 1600px; padding: 26px }
+.strata-api-monitor h1 { font-size: 24px; font-weight: 650; letter-spacing: -.02em }
+.strata-api-monitor .cards { gap: 14px; margin-block: 22px }
+.strata-api-monitor .card { border-radius: 9px; box-shadow: none }
+.strata-api-monitor .label { letter-spacing: 0; text-transform: none; font-size: 13px }
+.strata-api-monitor .value { font-size: 26px; font-weight: 600 }
+.strata-api-monitor .panel { border-radius: 9px }
+.strata-api-monitor .request.selected { background: var(--st-accent-tint); box-shadow: none; outline: 1px solid var(--st-accent); outline-offset: -1px }
+.strata-api-monitor footer { line-height: 1.7 }
+@media (min-width: 900px) { .metrics .model-card { grid-column: span 2 } }
+@media (max-width: 1000px) {
+  .st-header { gap: 10px }
+  .st-header__console { padding-inline: 8px }
+  .view--about .about { grid-template-columns: 1fr }
+  .cfg-form { grid-template-columns: 1fr }
+}
+@media (max-width: 640px) {
+  .st-header { padding: 9px 12px; gap: 8px; flex-wrap: wrap }
+  .st-header__brand { display: block; font-size: 21px }
+  .st-header .st-tabs { min-width: 0; order: 8; flex: 1 0 100%; width: 100%; justify-content: flex-start; gap: 4px; padding-top: 3px }
+  .st-header .st-tab { min-height: 38px; padding-inline: 16px; flex: 1; justify-content: center }
+  .st-header__spacer { min-width: 0 }
+  #unload-btn { min-width: 0; font-size: 12px; padding-inline: 8px }
+  .st-header .st-pill { padding-inline: 7px; min-width: 0; max-width: 45vw; overflow: hidden }
+  #pill-text { white-space: nowrap; text-overflow: ellipsis; overflow: hidden }
+  .st-header__console { font-size: 12px }
+  .chat { padding: 16px 14px; gap: 18px }
+  .st-msg--user { max-width: 94% }
+  .st-msg .st-bubble { font-size: 15px; line-height: 1.85 }
+  .composer-wrap { padding: 6px 12px 12px }
+  .st-composer { padding: 10px 12px }
+  .st-composer__bar { flex-wrap: wrap; row-gap: 8px }
+  .monitor, .about { padding: 12px; gap: 10px }
+  .st-card { padding: 12px }
+  .facts { grid-template-columns: 1fr; gap: 4px }
+  .facts dd { margin-bottom: 8px }
+  .strata-api-monitor main { padding: 18px 14px }
+  .strata-api-monitor .filters { flex-wrap: wrap }
+  .strata-api-monitor #search { width: min(190px, 100%) }
+  .strata-api-monitor .top { gap: 14px }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important }
+}

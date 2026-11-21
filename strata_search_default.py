@@ -15,7 +15,8 @@ SEARCH_REQUEST = re.compile(
     r"^\s*(?:"
     r"(?:请|麻烦|帮我|给我|能否|可以)?\s*(?:帮我\s*)?(?:先\s*)?(?:用|去|实际)?\s*"
     r"(?:联网\s*(?:搜索|搜一下|搜|查证|查一下|查询|查|核实)|"
-    r"(?:在线|网上|上网)\s*(?:搜索|搜一下|搜|查证|查一下|查询|查|核实))"
+    r"(?:在线|网上|上网)\s*(?:搜索|搜一下|搜|查证|查一下|查询|查|核实)|"
+    r"(?:搜索|搜一下|搜(?!索|一下))(?!\s*(?:工具|功能|按钮|开关|结果|失败|怎么|如何)))"
     r"\s*(?:(?:一下|下)\s*)?(?:(?:核实|查证|验证)\s*)?(?:(?:这条|以下|下面的)\s*(?:查询|问题|信息|说法)\s*)?"
     r"|(?:(?:please|can you|could you)\s+)*(?:use\s+(?:web search|the internet)\s+to\s+(?:verify|check|find)"
     r"|search\s+(?:the\s+web|(?:the\s+)?internet|online)|(?:look\s+up|find|verify|check)\s+online)"
@@ -32,12 +33,28 @@ SEARCH_NOTICES = {
 }
 
 
-def explicit_search(messages):
-    """Recognize search commands in the current user turn, never in quoted history."""
+def latest_user_text(messages):
     last = next((m for m in reversed(messages) if m.get("role") == "user"), {})
     text = last.get("content") or ""
     if isinstance(text, list):
         text = " ".join(p["text"] for p in text if isinstance(p, dict) and isinstance(p.get("text"), str))
+    return text if isinstance(text, str) else ""
+
+
+def tool_payload(result):
+    if result.get("ok"):
+        try:
+            data = json.loads(result["text"])
+            if isinstance(data, dict):
+                return data
+        except (KeyError, TypeError, ValueError):
+            pass
+    return {}
+
+
+def explicit_search(messages):
+    """Recognize search commands in the current user turn, never in quoted history."""
+    text = latest_user_text(messages)
     match = SEARCH_REQUEST.match(text)
     if not match:
         return None
@@ -46,17 +63,25 @@ def explicit_search(messages):
 
 
 def search_outcome(result):
-    if result.get("ok"):
-        try:
-            payload = json.loads(result["text"])
-            if isinstance(payload, dict):
-                if payload.get("results"):
-                    return "results"
-                if payload.get("status") == "no_results":
-                    return "no_results"
-        except (KeyError, TypeError, ValueError):
-            pass
+    payload = tool_payload(result)
+    if search_sources(payload):
+        return "results"
+    if payload.get("status") == "no_results":
+        return "no_results"
     return "unavailable"
+
+
+def search_sources(payload):
+    results = payload.get("results")
+    if not isinstance(results, list):
+        return []
+    sources = {}
+    for item in results:
+        url = item.get("url") if isinstance(item, dict) else None
+        if isinstance(url, str) and len(url) <= 2048 and re.fullmatch(r"https?://[^\s<>\\]+", url):
+            title = " ".join(str(item.get("title") or url).split())[:160]
+            sources.setdefault(url, re.sub(r"([\\\[\]\x60*_<>])", r"\\\1", title))
+    return list(sources.items())[:5]
 
 
 def search_notice(status, chinese):
@@ -175,7 +200,7 @@ class SearchMarkupFilter:
         return "".join(visible)
 
 
-def filter_search_events(events, recover_search):
+def filter_search_events(events, recover_search, report_empty=True):
     """Recover only a search offered by the server, leaving native calls intact."""
     filters = {kind: SearchMarkupFilter() for kind in ("reasoning", "content")}
     visible_text = {kind: False for kind in filters}
@@ -203,13 +228,41 @@ def filter_search_events(events, recover_search):
                 call = ToolCall(PUBLIC_SEARCH, args)
                 yield "event", Event("tool_start", call=call)
                 yield "event", Event("tool_call", call=call)
-            elif not visible_text["content"] and not called_tool and finish not in {"cancel", "disconnect"}:
+            elif report_empty and not visible_text["content"] and not called_tool and finish not in {"cancel", "disconnect"}:
                 if content.removed or reasoning.removed:
                     yield "event", Event("content", "本轮没有生成可用的回复。若需要联网搜索，请检查搜索设置后重试。")
         yield kind, value
 
 
 '''
+
+
+def patch_output_default(source):
+    old = '        s = self.shared\n        effort = self.effort_default()'
+    new = '''        s = self.shared
+        default_output = getattr(self, "fnos_output_limit", 0)
+        if default_output and "max_tokens" not in s:
+            s = {**s, "max_tokens": default_output}
+        effort = self.effort_default()'''
+    anchor = '    if cfg.get("reasoning_budget_tokens") is not None:'
+    if source.count(old) != 1 or source.count(anchor) != 1:
+        raise ValueError("Unexpected Strata shared settings path")
+    source = source.replace(old, new, 1).replace(anchor, '''    output_limit = cfg.get("_fnos_output_limit", 0)
+    svc.fnos_output_limit = output_limit if type(output_limit) is int and 0 <= output_limit <= 262144 else 0
+''' + anchor, 1)
+    ast.parse(source)
+    return source
+
+
+def patch_response_output_default(source):
+    old = '''            if req.get("max_output_tokens") is None and "max_tokens" in svc.shared:   # the shared Chat settings
+                req = {**req, "max_output_tokens": svc.shared["max_tokens"]}'''
+    new = '''            default_output = svc.shared.get("max_tokens", getattr(svc, "fnos_output_limit", 0))
+            if req.get("max_output_tokens") is None and default_output:
+                req = {**req, "max_output_tokens": default_output}'''
+    if source.count(old) != 1:
+        raise ValueError("Unexpected Strata Responses output path")
+    return source.replace(old, new, 1)
 
 
 def patch_server(source):
@@ -225,9 +278,9 @@ def patch_server(source):
                 req.get("strata_mcp") is True or default_search
             )'''
     offer = "                use_mcp = bool(extra)"
-    filtered = '''                if default_search:
-                    extra = [tool for tool in extra if tool["name"] == "public_search__search_web"]
-                if explicit is None and not own and any(tool["name"] == "public_search__search_web" for tool in extra):
+    filtered = '''                if default_search or explicit is not None:
+                    extra = [tool for tool in extra if tool["name"] == PUBLIC_SEARCH]
+                if explicit is None and not own and any(tool["name"] == PUBLIC_SEARCH for tool in extra):
                     messages = [{"role": "system", "content": (
                         "For public web searches call the declared public_search__search_web tool with one query string. "
                         "When you have a result, answer in normal text and cite its URLs. "
@@ -246,9 +299,9 @@ def patch_server(source):
     loop = "        for kind, x in svc.run(ids, thinking, tools, max_new, sampling, cancel, declared_only=True):"
     if updated.count(signature) != 1 or updated.count(loop) != 1:
         raise ValueError("Unexpected Strata MCP loop")
-    updated = updated.replace(signature, signature.replace("deferred=False", "deferred=False, recover_search=False"), 1)
+    updated = updated.replace(signature, signature.replace("deferred=False", "deferred=False, recover_search=False, report_empty=True"), 1)
     updated = updated.replace(run, """            events = self._run(ids, thinking, tools, max_new, sampling, cancel, force, declared_only, deferred)
-            yield from filter_search_events(events, recover_search)""", 1)
+            yield from filter_search_events(events, recover_search, report_empty)""", 1)
     updated = updated.replace(loop, """        for kind, x in svc.run(ids, thinking, tools, max_new, sampling, cancel, declared_only=True,
                                recover_search=not finalizing and PUBLIC_SEARCH in mcp_names):""", 1)
     mcp_signature = "                 mcp_names):"
@@ -271,16 +324,33 @@ def patch_server(source):
                            ("done", {"finish": "stop", "completion_tokens": 0})))
         else:
             events = svc.run(ids, thinking, tools, max_new, sampling, cancel, declared_only=True,
-                             recover_search=not finalizing and PUBLIC_SEARCH in mcp_names)
+                             recover_search=not finalizing and PUBLIC_SEARCH in mcp_names,
+                             report_empty=explicit is None)
         for kind, x in events:""", 1)
     boundary = '        if cancel.is_set() or len(results) < len(calls):'
     if updated.count(boundary) != 1:
         raise ValueError("Unexpected Strata MCP result boundary")
+    state = "    finalizing = False\n    messages = list(messages)"
+    finish = '    yield "done", {**done, "completion_tokens": total, "prompt_tokens": len(ids)}'
+    if any(updated.count(anchor) != 1 for anchor in (state, finish)):
+        raise ValueError("Unexpected Strata search result path")
+    updated = updated.replace(state, state + '''
+    explicit_sources = []
+''', 1)
+    updated = updated.replace(finish, '''    if explicit_sources and not cancel.is_set():
+        answer = "".join(text).strip()
+        if not any(url in answer for url, _ in explicit_sources):
+            heading = "联网搜索返回的来源" if explicit[1] else "Sources returned by web search"
+            lines = "\\n".join(f"- {title} — <{url}>" for url, title in explicit_sources)
+            prefix = "\\n\\n" if answer else ""
+            yield "event", Event("content", prefix + heading + "\\n\\n" + lines)
+''' + finish, 1)
     updated = updated.replace(boundary, '''            if explicit is not None:
                 status = search_outcome(r)
                 if status != "results" and not cancel.is_set():
                     yield from search_notice(status, chinese)
                     return
+                explicit_sources = search_sources(tool_payload(r))
 ''' + boundary, 1)
     updated = updated.replace(final, """        if explicit is not None or rounds >= max_rounds:""", 1)
     system = '''            messages.insert(system_end, {"role": "system", "content":
@@ -323,7 +393,7 @@ def patch_server(source):
                 run = run_with_mcp(svc, svc.mcp, messages, tools, kw, ids, thinking, max_new, max_req, req, cancel,
                                    names) if use_mcp else None''', 1)
     ast.parse(updated)
-    return updated
+    return patch_response_output_default(patch_output_default(updated))
 
 
 if __name__ == "__main__":
